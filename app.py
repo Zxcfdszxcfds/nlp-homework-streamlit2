@@ -1,5 +1,4 @@
 import streamlit as st
-from transformers import pipeline
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 import nltk
 
@@ -17,17 +16,20 @@ def download_nltk_data():
 
 download_nltk_data()
 
-# ---------------------- 缓存模型加载 ----------------------
+# ---------------------- 加载翻译模型（修复KeyError问题） ----------------------
 @st.cache_resource(show_spinner="正在加载翻译模型，首次加载需1-2分钟...")
 def load_translator():
-    """加载 Hugging Face 的英译中模型"""
-    translator = pipeline(
-        "translation_en_to_zh",
-        model="Helsinki-NLP/opus-mt-en-zh",
-        device=-1,  # 强制使用 CPU，避免无 GPU 报错
-        framework="pt"
-    )
-    return translator
+    from transformers import MarianMTModel, MarianTokenizer
+
+    model_name = "Helsinki-NLP/opus-mt-en-zh"
+    tokenizer = MarianTokenizer.from_pretrained(model_name)
+    model = MarianMTModel.from_pretrained(model_name)
+
+    def translate_fn(text):
+        translated = model.generate(**tokenizer(text, return_tensors="pt", padding=True))
+        return [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
+
+    return translate_fn
 
 translator = load_translator()
 
@@ -46,15 +48,11 @@ basic_dict = {
 def rule_based_translate(sentence: str) -> str:
     """基于词典的逐词直译"""
     import re
-    # 先把句子按标点和空格分割，保留标点
     tokens = re.findall(r'\w+|[^\w\s]', sentence.strip())
     translated = []
     for token in tokens:
         clean_token = token.lower().strip(".,!?")
-        if clean_token in basic_dict:
-            translated.append(basic_dict[clean_token])
-        else:
-            translated.append(token)
+        translated.append(basic_dict.get(clean_token, token))
     return "".join(translated)
 
 # ---------------------- 页面内容 ----------------------
@@ -81,7 +79,7 @@ with tab1:
     if st.button("开始翻译", key="btn1"):
         with st.spinner("模型正在翻译中..."):
             try:
-                result = translator(en_text)[0]["translation_text"]
+                result = translator(en_text)[0]
                 st.success("翻译完成！")
                 st.subheader("译文结果：")
                 st.info(result)
@@ -103,7 +101,7 @@ with tab2:
         with st.spinner("正在对比两种翻译结果..."):
             try:
                 rule_trans = rule_based_translate(en_text2)
-                nmt_trans = translator(en_text2)[0]["translation_text"]
+                nmt_trans = translator(en_text2)[0]
                 
                 col1, col2 = st.columns(2)
                 with col1:
