@@ -1,4 +1,5 @@
 import streamlit as st
+from transformers import MarianMTModel, MarianTokenizer
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 import nltk
 
@@ -16,11 +17,9 @@ def download_nltk_data():
 
 download_nltk_data()
 
-# ---------------------- 加载翻译模型（修复KeyError问题） ----------------------
+# ---------------------- 加载翻译模型 ----------------------
 @st.cache_resource(show_spinner="正在加载翻译模型，首次加载需1-2分钟...")
 def load_translator():
-    from transformers import MarianMTModel, MarianTokenizer
-
     model_name = "Helsinki-NLP/opus-mt-en-zh"
     tokenizer = MarianTokenizer.from_pretrained(model_name)
     model = MarianMTModel.from_pretrained(model_name)
@@ -46,7 +45,6 @@ basic_dict = {
 }
 
 def rule_based_translate(sentence: str) -> str:
-    """基于词典的逐词直译"""
     import re
     tokens = re.findall(r'\w+|[^\w\s]', sentence.strip())
     translated = []
@@ -70,16 +68,18 @@ with tab1:
     st.header("🧠 神经机器翻译引擎 (NMT Engine)")
     st.markdown("输入英文句子，体验基于 Transformer 的英译中效果。")
     
-    en_text = st.text_area(
+    # 关键：加了 key="en_text1"
+    en_text1 = st.text_area(
         "请输入英文句子：",
         value="It rains cats and dogs.",
-        height=150
+        height=150,
+        key="en_text1"
     )
     
     if st.button("开始翻译", key="btn1"):
         with st.spinner("模型正在翻译中..."):
             try:
-                result = translator(en_text)[0]
+                result = translator(en_text1)[0]
                 st.success("翻译完成！")
                 st.subheader("译文结果：")
                 st.info(result)
@@ -91,10 +91,12 @@ with tab2:
     st.header("⚖️ 基于规则的直译 vs. 神经网络意译")
     st.markdown("对比两种翻译范式的差异，观察基于规则翻译的局限性。")
     
+    # 关键：加了 key="en_text2"
     en_text2 = st.text_area(
         "请输入英文句子：",
         value="It rains cats and dogs.",
-        height=150
+        height=150,
+        key="en_text2"
     )
     
     if st.button("开始对比", key="btn2"):
@@ -118,8 +120,9 @@ with tab3:
     st.header("📊 机器翻译质量自动评测 (BLEU Score)")
     st.markdown("输入待评测译文和参考译文，自动计算 BLEU 分数（0~1，越高越接近参考译文）。")
     
-    candidate_text = st.text_area("待评测译文（如 NMT 或直译结果）：", height=100)
-    reference_text = st.text_area("参考译文（人工翻译或标准译文）：", height=100)
+    # 关键：两个 text_area 都加了不同的 key
+    candidate_text = st.text_area("待评测译文（如 NMT 或直译结果）：", height=100, key="candidate")
+    reference_text = st.text_area("参考译文（人工翻译或标准译文）：", height=100, key="reference")
     
     if st.button("计算 BLEU 分数", key="btn3"):
         if not candidate_text or not reference_text:
